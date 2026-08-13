@@ -24,6 +24,19 @@ from pydantic import BaseModel, Field
 from terabox_ai import TeraBoxAI, TeraBoxAIError, TeraBoxAuthError
 
 MODEL_ID = os.environ.get("TERABOX_MODEL_ID", "tera-ai")
+
+# Extra model ids advertised on /v1/models. Some OpenAI clients validate the
+# model name against a hard-coded registry before sending the request
+# (llama-index raises ValueError: Unknown model '...'), so exposing familiar
+# aliases lets those tools work unchanged. The requested name is only echoed
+# back in the response; Tera AI is always the actual backend.
+MODEL_ALIASES = [
+    m.strip()
+    for m in os.environ.get(
+        "TERABOX_MODEL_ALIASES", "gpt-4o,gpt-4o-mini,gpt-4.1,gpt-3.5-turbo"
+    ).split(",")
+    if m.strip()
+]
 API_KEY = os.environ.get("API_KEY")  # optional bearer token for THIS server
 
 app = FastAPI(
@@ -139,7 +152,10 @@ def health() -> Dict[str, Any]:
 def list_models() -> Dict[str, Any]:
     return {
         "object": "list",
-        "data": [{"id": MODEL_ID, "object": "model", "created": 0, "owned_by": "terabox"}],
+        "data": [
+            {"id": m, "object": "model", "created": 0, "owned_by": "terabox"}
+            for m in [MODEL_ID, *MODEL_ALIASES]
+        ],
     }
 
 

@@ -187,3 +187,113 @@ print(client.chat.completions.create(
 - `cookies.txt` / `ndus` は**あなたのアカウントそのもの**です。リポジトリにコミットせず、
   共有もしないでください。漏れた場合は TeraBox でログアウト（全端末）してローテートしてください。
 - エンドポイントは予告なく変更されます。動かなくなったら `ENDPOINTS.md` の手順で再解析してください。
+
+---
+
+## 9. 既存の OpenAI 用ツールから使う
+
+`server.py` を起動して `base_url` を `http://127.0.0.1:8000/v1` に向けるだけで、
+既存の OpenAI クライアントがそのまま使えます。API キーは任意の文字列で構いません
+（サーバ側で `API_KEY` を設定したときのみ検証されます）。
+
+```bash
+export TERABOX_COOKIE_FILE=$PWD/cookies.txt
+uvicorn server:app --host 127.0.0.1 --port 8000
+```
+
+### 動作検証済みクライアント
+
+| ツール | バージョン | 非ストリーミング | ストリーミング |
+|---|---|---|---|
+| openai（Python） | 3.0.0 | OK | OK |
+| openai（Node.js） | 7.4.0 | OK | OK |
+| LangChain（`langchain-openai`） | 1.4.3 | OK | OK |
+| LiteLLM | 1.96.2 | OK | OK |
+| LlamaIndex（`llama-index-llms-openai`） | 0.7.10 | OK ※ | OK ※ |
+| curl | 8.5.0 | OK | OK |
+
+### Python（openai SDK）
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="dummy")
+r = client.chat.completions.create(
+    model="tera-ai",
+    messages=[{"role": "user", "content": "こんにちは"}],
+)
+print(r.choices[0].message.content)
+```
+
+### Node.js（openai SDK）
+
+```js
+import OpenAI from "openai";
+
+const client = new OpenAI({ baseURL: "http://127.0.0.1:8000/v1", apiKey: "dummy" });
+const r = await client.chat.completions.create({
+  model: "tera-ai",
+  messages: [{ role: "user", content: "こんにちは" }],
+});
+console.log(r.choices[0].message.content);
+```
+
+### LangChain
+
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model="tera-ai",
+    base_url="http://127.0.0.1:8000/v1",
+    api_key="dummy",
+)
+print(llm.invoke("OAuth 2.0 とは？").content)
+```
+
+LCEL チェーン（`prompt | llm | StrOutputParser()`）や `llm.stream()` もそのまま動きます。
+
+### LiteLLM
+
+```python
+import litellm
+
+r = litellm.completion(
+    model="openai/tera-ai",
+    api_base="http://127.0.0.1:8000/v1",
+    api_key="dummy",
+    messages=[{"role": "user", "content": "こんにちは"}],
+)
+print(r.choices[0].message.content)
+```
+
+### LlamaIndex ※注意
+
+`llama-index-llms-openai` はリクエスト送信前にモデル名を自前のレジストリと照合するため、
+`model="tera-ai"` だと `ValueError: Unknown model 'tera-ai'` で落ちます
+（サーバ側の問題ではありません）。本サーバは `/v1/models` で `gpt-4o` / `gpt-4o-mini` /
+`gpt-4.1` / `gpt-3.5-turbo` をエイリアスとして公開しているので、見慣れた名前を渡せば
+そのまま使えます。モデル名はレスポンスにエコーされるだけで、実際のバックエンドは
+常に Tera AI です。
+
+```python
+from llama_index.llms.openai import OpenAI as LIOpenAI
+
+llm = LIOpenAI(
+    model="gpt-4o",                       # エイリアス。中身は Tera AI
+    api_base="http://127.0.0.1:8000/v1",
+    api_key="dummy",
+    is_chat_model=True,
+    is_function_calling_model=False,
+)
+print(llm.complete("RAG とは？"))
+```
+
+エイリアス一覧は環境変数 `TERABOX_MODEL_ALIASES`（カンマ区切り）で変更できます。
+
+### 未対応の機能
+
+Tera AI 側に対応する概念がないため、`tools` / `function_call` の Function Calling、
+`response_format` による JSON モード、`logprobs`、`n>1` は未対応です。
+`temperature` や `max_tokens` はエラーにはなりませんが無視されます。
+`usage` のトークン数は上流が返さないため常に 0 です。
