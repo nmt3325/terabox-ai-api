@@ -187,9 +187,17 @@ class TeraBoxAI:
         return self._json("GET", "/api/quota")
 
     # ------------------------------------------------------------------ tera ai
-    def templates(self) -> Dict[str, Any]:
-        """GET /ai/proxy/agent/template - suggested prompt templates."""
-        return self._json("GET", "/ai/proxy/agent/template")
+    def templates(self, language: Optional[str] = None) -> Dict[str, Any]:
+        """GET /ai/proxy/agent/template - suggested prompt templates.
+
+        ``client_source`` and ``language`` are BOTH required by the server;
+        omitting either returns HTTP 400 errno 2 (TemplateReqDto validation).
+        """
+        return self._json(
+            "GET",
+            "/ai/proxy/agent/template",
+            params={"client_source": 1, "language": language or self.language},
+        )
 
     def records(self, size: int = 20, cursor: Optional[str] = None) -> Dict[str, Any]:
         """GET /ai/proxy/record/list - AI history records (paginated by cursor)."""

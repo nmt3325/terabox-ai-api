@@ -73,3 +73,29 @@ The final `response/completed` frame carries the whole message array, and a
 * The SPA drops the `ndus` cookie on `/ai/*` routes when it decides it is logged
   out, which is why browser automation needs the cookie re-injected before each
   navigation. Plain HTTP clients are unaffected.
+
+## Required-parameter gotchas (verified by live probing)
+
+### `GET /ai/proxy/agent/template`
+
+Both `client_source` and `language` are **required query parameters**. Sending
+only the usual `app_id / web / channel / clienttype` set returns:
+
+```json
+{"errno":2,"newno":"Key: 'TemplateReqDto.client_source' Error:Field validation for 'client_source' failed on the 'required' tag\nKey: 'TemplateReqDto.language' ..."}
+```
+
+Working request:
+
+```
+GET /ai/proxy/agent/template?app_id=250528&web=1&channel=dubox&clienttype=0&client_source=1&language=en
+-> errno 0, data.file_detail_prompts[] (30 suggested prompts)
+```
+
+### `POST /ai/proxy/agent/stream`
+
+`messages` must contain **exactly one** element. Two or more always returns
+HTTP 400 `{"errno":2,...,"show_msg":"params error"}` regardless of `chat_id`
+or `is_first`. Conversation history is stored server-side and keyed by
+`chat_id`, so a follow-up turn sends only the newest user message plus
+`chat_id` and `is_first: false`.
